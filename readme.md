@@ -1,0 +1,1 @@
+# A project for practicing for AI-103 Certificate

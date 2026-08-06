@@ -1,0 +1,5 @@
+Flask
+Flask-Security
+Flask-SQLAlchemy
+Flask-WTF
+python-dotenv
