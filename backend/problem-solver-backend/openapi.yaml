@@ -1,0 +1,180 @@
+openapi: 3.0.3
+info:
+  title: Problem Solver API
+  version: 0.1.0
+  description: >
+    Turns a raw problem into a sharpened brief plus a proposed AI application.
+    Auth is session-cookie based (Flask-Security). Flow: register or login to
+    get the session + XSRF-TOKEN cookies, then call /api/solve. State-changing
+    calls may require the XSRF-TOKEN cookie value echoed back in the
+    X-XSRF-Token header.
+
+servers:
+  - url: http://localhost:5000
+    description: Local dev (Flask). Frontend proxies /api/* here.
+
+tags:
+  - name: auth
+    description: Flask-Security session auth
+  - name: app
+    description: Problem-solving endpoints
+
+paths:
+  /api/accounts/register:
+    post:
+      tags: [auth]
+      summary: Register a user (auto-logs in; CONFIRMABLE is off)
+      description: CSRF-exempt (unauth endpoint). Sets session + XSRF-TOKEN cookies on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      responses:
+        '200': { description: Registered and logged in }
+        '400': { description: Validation error (envelope with field errors) }
+
+  /api/accounts/login:
+    get:
+      tags: [auth]
+      summary: Seed the CSRF cookie
+      description: >
+        Returns the login form payload and sets the XSRF-TOKEN cookie even when
+        logged out. Call this before POST login if you need the CSRF token.
+      responses:
+        '200': { description: XSRF-TOKEN cookie seeded }
+    post:
+      tags: [auth]
+      summary: Log in
+      description: CSRF-exempt (unauth endpoint). Sets session + XSRF-TOKEN cookies on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      responses:
+        '200': { description: Logged in }
+        '400': { description: Bad credentials (generic response) }
+
+  /api/accounts/logout:
+    post:
+      tags: [auth]
+      summary: Log out
+      security:
+        - sessionCookie: []
+      responses:
+        '200': { description: Logged out }
+
+  /api/me:
+    get:
+      tags: [app]
+      summary: Current user
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The logged-in user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer, example: 1 }
+                  email: { type: string, example: test@test.com }
+        '401': { description: Not authenticated }
+
+  /api/solve:
+    post:
+      tags: [app]
+      summary: Define a problem and propose an AI app
+      description: >
+        Runs the define -> solve agent pipeline. Requires a logged-in session.
+        Send X-XSRF-Token (value of the XSRF-TOKEN cookie) if CSRF is enforced.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [problem]
+              properties:
+                problem:
+                  type: string
+                  example: All my images is a mess
+      responses:
+        '200':
+          description: Brief plus AI-app proposal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  brief: { $ref: '#/components/schemas/Brief' }
+                  proposal: { $ref: '#/components/schemas/Proposal' }
+        '400':
+          description: Missing problem
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { description: Not authenticated }
+        '502':
+          description: Agent returned invalid (non-JSON) output
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Flask session cookie, set by register/login.
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-XSRF-Token
+      description: Echo of the XSRF-TOKEN cookie value.
+
+  schemas:
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, example: test@test.com }
+        password: { type: string, example: Password123! }
+
+    Brief:
+      type: object
+      description: Output of the define agent.
+      properties:
+        core_problem: { type: string }
+        persona: { type: string }
+        inputs:
+          type: array
+          items: { type: string }
+        success_criteria: { type: string }
+
+    Proposal:
+      type: object
+      description: Output of the solve agent.
+      properties:
+        app_concept: { type: string }
+        ai_approach: { type: string }
+        required_inputs:
+          type: array
+          items: { type: string }
+        azure_services:
+          type: array
+          items: { type: string }
+        first_step: { type: string }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }

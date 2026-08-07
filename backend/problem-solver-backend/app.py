@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 from flask_security import (
@@ -8,6 +8,8 @@ from flask_security import (
 )
 from flask_security.models import fsqla_v3 as fsqla
 from dotenv import load_dotenv
+from agents.provision_all import provision_all
+from agents.orchestrator import solve_problem
 
 load_dotenv()
 
@@ -74,6 +76,19 @@ def me():
         email=current_user.email,
     )
 
-
+@app.post("/api/solve")
+@auth_required("session")
+def solve():
+    problem = (request.get_json(silent=True) or {}).get("problem","").strip()
+    if not problem:
+        return jsonify(error="Problem is required"), 400
+    
+    try:
+        return jsonify(solve_problem(problem))
+    except ValueError:
+        return jsonify(error="Agent returned invalid output"), 502
+  
 with app.app_context():
     db.create_all()
+    
+provision_all()

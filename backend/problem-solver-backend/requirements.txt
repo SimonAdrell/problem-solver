@@ -3,3 +3,7 @@ Flask-Security
 Flask-SQLAlchemy
 Flask-WTF
 python-dotenv
+azure-ai-projects>=2.3.0
+azure-identity
+pytest
+argon2-cffi
