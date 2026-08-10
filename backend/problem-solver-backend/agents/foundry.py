@@ -1,9 +1,10 @@
 import os, json, functools
 from dotenv import load_dotenv
-from azure.identity import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import PromptAgentDefinition
 from azure.core.exceptions import ResourceNotFoundError
+from openai import AzureOpenAI
 
 load_dotenv()
 
@@ -12,6 +13,17 @@ def _project() -> AIProjectClient:
     return AIProjectClient(
         endpoint=os.environ["PROJECT_ENDPOINT"],
         credential=DefaultAzureCredential()
+    )
+    
+def _image_client():
+    account = os.environ["PROJECT_ENDPOINT"].split("/api/projects/")[0]
+    return AzureOpenAI(
+        azure_endpoint=account, 
+        azure_ad_token_provider=get_bearer_token_provider(
+            DefaultAzureCredential(),
+            "https://cognitiveservices.azure.com/.default"
+        ),
+        api_version="2025-04-01-preview"
     )
     
 def provision_agent(agent_name: str, instructions: str):
@@ -44,3 +56,13 @@ def run_agent(agent_name: str, user_input: str) -> dict:
     except json.JSONDecodeError:
         raise ValueError(f"Agent {agent_name!r} returned non-JSON: {response.output_text!r}")
 
+def generate_image(prompt: str) -> str:
+    response = _image_client().images.generate(
+        model=os.environ["IMAGE_MODEL_DEPLOYMENT_NAME"],
+        prompt=prompt,
+        size="1536x1024",
+        quality="high",
+        n=1
+    )
+
+    return f"data:image/png;base64,{response.data[0].b64_json}"

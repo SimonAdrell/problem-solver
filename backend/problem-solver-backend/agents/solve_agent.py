@@ -29,6 +29,7 @@ Keys:
   extending the brief's inputs
 - azure_services: array of strings — specific services to build it
 - first_step: string — the first concrete prototype action
+- image_prompt: string — a detailed image-generation prompt for a product screenshot of this app. Describe the main screen, layout (nav/sidebar/panels), key UI components, the data shown, color palette, and a polished modern SaaS-dashboard style, high fidelity.
 """
 
 def provision():

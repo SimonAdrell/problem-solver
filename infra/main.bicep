@@ -1,5 +1,6 @@
 param accountName string = 'aif-problemsolver-dev'
 param modelName string = 'gpt-5.5'
+param imageModelName string = 'gpt-image-1-mini'
 param projectName string = 'proj-problemsolver-dev'
 param location string = resourceGroup().location
 
@@ -58,6 +59,26 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2026-05-15
       format: 'OpenAI'
       name: modelName
       version: '2026-04-24'
+    }
+  }
+  tags: tags
+}
+
+resource imageDeployment 'Microsoft.CognitiveServices/accounts/deployments@2026-05-15-preview' = {
+  name: imageModelName
+  parent: account
+  dependsOn: [
+    deployment
+  ]
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 3
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: imageModelName
+      version: '2025-10-06'
     }
   }
   tags: tags

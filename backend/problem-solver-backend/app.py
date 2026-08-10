@@ -10,6 +10,7 @@ from flask_security.models import fsqla_v3 as fsqla
 from dotenv import load_dotenv
 from agents.provision_all import provision_all
 from agents.orchestrator import solve_problem
+from agents.render_agent import render_image
 
 load_dotenv()
 
@@ -87,7 +88,15 @@ def solve():
         return jsonify(solve_problem(problem))
     except ValueError:
         return jsonify(error="Agent returned invalid output"), 502
-  
+
+@app.post("/api/render")
+@auth_required("session")
+def render():
+    proposal = (request.get_json(silent=True) or {}).get("proposal")
+    if not proposal:
+        return jsonify(error="Missing proposal"), 400
+    return jsonify(image=render_image(proposal))
+
 with app.app_context():
     db.create_all()
     
