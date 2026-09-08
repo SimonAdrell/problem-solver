@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Practice project for the AI-103 (Azure AI) certification. Monorepo with a Next.js frontend and a Flask backend, currently focused on session-based auth. `backend/research_agent` and `infra/` are empty placeholders for an AI agent component and IaC that don't exist yet — don't assume code lives there.
+Practice project for the AI-103 (Azure AI) certification. Monorepo with a Next.js frontend and a Flask backend. Takes a vague problem statement and returns a brief, three buildable Azure AI app ideas, and — for the idea you pick — an architecture blueprint plus a generated concept screenshot. Session-based auth wraps all of it. `infra/` holds Bicep (`main.bicep`, `dev.bicepparam`).
 
 ## Commands
 
@@ -42,7 +42,7 @@ There's no `wsgi.py`/`manage.py`/`Procfile` — run via `flask --app app run` (o
 - CSRF: `WTF_CSRF_CHECK_DEFAULT=False` combined with `SECURITY_CSRF_PROTECT_MECHANISMS=["session", "basic"]` — Flask-Security enforces CSRF itself via the `XSRF-TOKEN` cookie / `X-XSRF-Token` header pair, independent of global Flask-WTF checks.
 - `lib/api.ts`'s `api()` helper is the single fetch wrapper: reads `XSRF-TOKEN` from `document.cookie` and sends it as `X-XSRF-Token` on every non-GET request; unwraps Flask-Security's `{response: ...}` envelope; throws `ApiError` (with `errors` / `fieldErrors`) on non-2xx.
 - `lib/auth-context.tsx`'s `AuthProvider` (mounted once, in the real root layout `app/layout.tsx`, so it wraps every route including `(auth)`) bootstraps by calling `GET /api/accounts/login` (seeds the CSRF cookie even when logged out) then `GET /api/me` to resolve the session. `user` state is a three-way flag: `undefined` = still checking, `null` = logged out, `User` = logged in. Any page reads it via `useAuth()`, which also exposes `login()`, `logout()`, and `refresh()` (re-fetches `/api/me` — used after `register` since Flask-Security auto-logs-in on signup when `SECURITY_CONFIRMABLE=False`).
-- `GET /api/me` (in `app.py`) is the only custom API route so far; everything else under `/api/accounts/*` is Flask-Security's built-in views.
+- Custom API routes in `app.py`: `GET /api/me`, `POST /api/solve`, `POST /api/blueprint`, `POST /api/image` — all `auth_required("session")`. Everything under `/api/accounts/*` is Flask-Security's built-in views. `openapi.yaml` documents them all.
 
 ### Route protection
 `proxy.ts` (Next.js 16 renamed the `middleware.ts` convention to `proxy.ts` — see `node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`) gates every route except `/login`, `/register`, `/reset-password`, and `/api/*`. Because the session cookie is opaque (signed server-side by Flask, not verifiable in the proxy), it works by calling `GET /api/me` through the same rewrite the browser uses and redirecting to `/login` on a non-2xx before the page ever renders — deliberately *not* client-side gating (no `useEffect` redirect, no flash of protected content, no shipping a protected page's JS to a logged-out visitor). Pages themselves don't need to know about auth state to be "protected"; only use `useAuth()` in a page when it needs to read/display the user.

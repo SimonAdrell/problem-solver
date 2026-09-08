@@ -15,6 +15,7 @@ def _project() -> AIProjectClient:
         credential=DefaultAzureCredential()
     )
     
+@functools.cache
 def _image_client():
     account = os.environ["PROJECT_ENDPOINT"].split("/api/projects/")[0]
     return AzureOpenAI(
@@ -56,13 +57,12 @@ def run_agent(agent_name: str, user_input: str) -> dict:
     except json.JSONDecodeError:
         raise ValueError(f"Agent {agent_name!r} returned non-JSON: {response.output_text!r}")
 
-def generate_image(prompt: str) -> str:
+def generate_image(prompt: str, size: str = "1024x1024", quality: str = "medium") -> str:
     response = _image_client().images.generate(
         model=os.environ["IMAGE_MODEL_DEPLOYMENT_NAME"],
         prompt=prompt,
-        size="1536x1024",
-        quality="high",
+        size=size,
+        quality=quality,
         n=1
     )
-
-    return f"data:image/png;base64,{response.data[0].b64_json}"
+    return f"data:image/png;base64,{response.data[0].b64_json}" 

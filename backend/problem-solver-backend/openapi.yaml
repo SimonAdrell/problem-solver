@@ -3,9 +3,10 @@ info:
   title: Problem Solver API
   version: 0.1.0
   description: >
-    Turns a raw problem into a sharpened brief plus a proposed AI application.
+    Turns a raw problem into a sharpened brief plus three proposed AI applications.
     Auth is session-cookie based (Flask-Security). Flow: register or login to
-    get the session + XSRF-TOKEN cookies, then call /api/solve. State-changing
+    get the session + XSRF-TOKEN cookies, then call /api/solve, /api/blueprint
+    for one chosen idea, and /api/image for that blueprint's render. State-changing
     calls may require the XSRF-TOKEN cookie value echoed back in the
     X-XSRF-Token header.
 
@@ -108,14 +109,16 @@ paths:
                   example: All my images is a mess
       responses:
         '200':
-          description: Brief plus AI-app proposal
+          description: Brief plus three AI-app ideas
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   brief: { $ref: '#/components/schemas/Brief' }
-                  proposal: { $ref: '#/components/schemas/Proposal' }
+                  ideas:
+                    type: array
+                    items: { $ref: '#/components/schemas/Idea' }
         '400':
           description: Missing problem
           content:
@@ -124,6 +127,93 @@ paths:
         '401': { description: Not authenticated }
         '502':
           description: Agent returned invalid (non-JSON) output
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/blueprint:
+    post:
+      tags: [app]
+      summary: Blueprint one chosen idea
+      description: >
+        Runs the blueprint agent over the brief plus one idea from /api/solve.
+        Returns architecture, build estimate, risks, and an image prompt to feed
+        /api/image. Requires a logged-in session.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [brief, idea]
+              properties:
+                brief: { $ref: '#/components/schemas/Brief' }
+                idea: { $ref: '#/components/schemas/Idea' }
+      responses:
+        '200':
+          description: Blueprint for the chosen idea
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blueprint: { $ref: '#/components/schemas/Blueprint' }
+        '400':
+          description: Missing brief or idea
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { description: Not authenticated }
+        '502':
+          description: Agent returned invalid (non-JSON) output
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/image:
+    post:
+      tags: [app]
+      summary: Render a concept screenshot
+      description: >
+        Generates a product screenshot from an image prompt, normally the
+        image_prompt returned by /api/blueprint. Requires a logged-in session.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image_prompt]
+              properties:
+                image_prompt:
+                  type: string
+                  example: A polished SaaS dashboard showing an image library grouped by event
+      responses:
+        '200':
+          description: The rendered image
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  image:
+                    type: string
+                    description: PNG as a base64 data URI.
+                    example: data:image/png;base64,iVBORw0KGgo...
+        '400':
+          description: Missing image prompt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { description: Not authenticated }
+        '502':
+          description: Image generation failed
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -160,9 +250,9 @@ components:
           items: { type: string }
         success_criteria: { type: string }
 
-    Proposal:
+    Idea:
       type: object
-      description: Output of the solve agent.
+      description: One of the three app ideas from the solve agent.
       properties:
         app_concept: { type: string }
         ai_approach: { type: string }
@@ -173,6 +263,25 @@ components:
           type: array
           items: { type: string }
         first_step: { type: string }
+
+    Blueprint:
+      type: object
+      description: Output of the blueprint agent for one idea.
+      properties:
+        architecture: { type: string }
+        build_estimate:
+          type: object
+          properties:
+            weeks: { type: string, example: 2-4 weeks }
+            drivers: { type: string }
+        risks:
+          type: array
+          items:
+            type: object
+            properties:
+              risk: { type: string }
+              check: { type: string }
+        image_prompt: { type: string }
 
     Error:
       type: object

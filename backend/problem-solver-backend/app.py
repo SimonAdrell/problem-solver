@@ -10,7 +10,9 @@ from flask_security.models import fsqla_v3 as fsqla
 from dotenv import load_dotenv
 from agents.provision_all import provision_all
 from agents.orchestrator import solve_problem
-from agents.render_agent import render_image
+from agents.blueprint_agent import generate_blueprint
+from agents.image import render_image
+from openai import OpenAIError
 
 load_dotenv()
 
@@ -89,13 +91,30 @@ def solve():
     except ValueError:
         return jsonify(error="Agent returned invalid output"), 502
 
-@app.post("/api/render")
+@app.post("/api/blueprint")
 @auth_required("session")
-def render():
-    proposal = (request.get_json(silent=True) or {}).get("proposal")
-    if not proposal:
-        return jsonify(error="Missing proposal"), 400
-    return jsonify(image=render_image(proposal))
+def blueprint():
+    body = request.get_json(silent=True) or {}
+    brief = body.get("brief")
+    idea = body.get("idea")
+    
+    if not brief or not idea:
+        return jsonify(error="Missing brief or idea"), 400
+    try:
+        return jsonify(blueprint=generate_blueprint(brief, idea))
+    except ValueError:
+        return jsonify(error="Agent returned invalid output"), 502
+
+@app.post("/api/image")
+@auth_required("session")
+def image():
+    image_prompt = ((request.get_json(silent=True) or {}).get("image_prompt") or "").strip()
+    if not image_prompt:
+        return jsonify(error="Missing image prompt"), 400
+    try:
+        return jsonify(image=render_image(image_prompt))
+    except OpenAIError:
+        return jsonify(error="Image generation failed"), 502
 
 with app.app_context():
     db.create_all()

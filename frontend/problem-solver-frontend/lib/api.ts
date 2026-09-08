@@ -8,7 +8,7 @@ export class ApiError extends Error {
     }
 }
 
-export async function api<T = any>(
+export async function api<T = unknown>(
     path: string,
     { method = "GET", body }: { method?: string; body?: unknown } = {}
 ): Promise<T> {
@@ -27,7 +27,9 @@ export async function api<T = any>(
     const payload = json.response ?? json          // Flask-Security wraps in `response`
 
     if (!res.ok) {
-        throw new ApiError(res.status, payload.errors ?? [], payload.field_errors ?? {})
+        // Flask-Security sends `errors: [...]`; our own routes send `error: "..."`.
+        const errors = payload.errors ?? (payload.error ? [payload.error] : [])
+        throw new ApiError(res.status, errors, payload.field_errors ?? {})
     }
     return payload
 }

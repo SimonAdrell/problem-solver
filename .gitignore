@@ -47,3 +47,5 @@ next-env.d.ts
 **/.venv
 **/__pycache__
 *.pyc
+# local planning notes — not for the public repo
+TODO.md
