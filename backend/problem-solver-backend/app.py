@@ -7,6 +7,9 @@ from flask_security import (
     current_user,
 )
 from flask_security.models import fsqla_v3 as fsqla
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from agents.provision_all import provision_all
 from agents.orchestrator import solve_problem
@@ -55,6 +58,12 @@ app.config.update(
     SESSION_COOKIE_SECURE=not DEV, 
     SESSION_COOKIE_HTTPONLY=True,
     REMEMBER_COOKIE_SAMESITE="Lax",
+
+    # 413s an oversized body when a view reads it (Flask 3.1 enforces on read,
+    # not eagerly against Content-Length -- a view that never touches the body
+    # is not capped). Blueprint posts the whole brief+idea, so keep headroom
+    # above the per-field caps below.
+    MAX_CONTENT_LENGTH=64 * 1024,
 )
 
 if DEV:
@@ -66,7 +75,12 @@ fsqla.FsModels.set_db_info(db)
 class Role(db.Model, fsqla.FsRoleMixin): pass
 class User(db.Model, fsqla.FsUserMixin): pass
 
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 csrf = CSRFProtect(app)
+limiter = Limiter(get_remote_address, app=app)
+ai_limit = limiter.limit("20 per hour")  # the unauthenticated, model-billing endpoints
+MAX_PROBLEM = 2000
 user_datastore = SQLAlchemyUserDatastore(db, User, Role)
 security = Security(app, user_datastore)
 
@@ -80,11 +94,13 @@ def me():
     )
 
 @app.post("/api/solve")
-@auth_required("session")
+@ai_limit
 def solve():
     problem = (request.get_json(silent=True) or {}).get("problem","").strip()
     if not problem:
         return jsonify(error="Problem is required"), 400
+    if len(problem) > MAX_PROBLEM:
+        return jsonify(error=f"Problem must be under {MAX_PROBLEM} characters"), 400
     
     try:
         return jsonify(solve_problem(problem))
@@ -92,7 +108,7 @@ def solve():
         return jsonify(error="Agent returned invalid output"), 502
 
 @app.post("/api/blueprint")
-@auth_required("session")
+@ai_limit
 def blueprint():
     body = request.get_json(silent=True) or {}
     brief = body.get("brief")
@@ -106,15 +122,25 @@ def blueprint():
         return jsonify(error="Agent returned invalid output"), 502
 
 @app.post("/api/image")
-@auth_required("session")
+@ai_limit
 def image():
     image_prompt = ((request.get_json(silent=True) or {}).get("image_prompt") or "").strip()
     if not image_prompt:
         return jsonify(error="Missing image prompt"), 400
+    if len(image_prompt) > MAX_PROBLEM:
+        return jsonify(error=f"Prompt must be under {MAX_PROBLEM} characters"), 400
     try:
         return jsonify(image=render_image(image_prompt))
     except OpenAIError:
         return jsonify(error="Image generation failed"), 502
+
+@app.errorhandler(429)
+def ratelimited(e):
+    return jsonify(error="Too many requests, try again later"), 429
+
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify(error="Request too large"), 413
 
 with app.app_context():
     db.create_all()

@@ -2,6 +2,7 @@ Flask
 Flask-Security
 Flask-SQLAlchemy
 Flask-WTF
+Flask-Limiter
 python-dotenv
 azure-ai-projects>=2.3.0
 openai
