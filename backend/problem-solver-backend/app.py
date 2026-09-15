@@ -1,12 +1,10 @@
 import os
 from flask import Flask, jsonify, request
-from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 from flask_security import (
     Security, SQLAlchemyUserDatastore, auth_required,
     current_user,
 )
-from flask_security.models import fsqla_v3 as fsqla
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -16,6 +14,8 @@ from agents.orchestrator import solve_problem
 from agents.blueprint_agent import generate_blueprint
 from agents.image import render_image
 from openai import OpenAIError
+from extensions import db
+from models import User, Role
 
 load_dotenv()
 
@@ -69,11 +69,7 @@ app.config.update(
 if DEV:
     app.config["SECURITY_EMAIL_VALIDATOR_ARGS"] = {"check_deliverability": False}
 
-db = SQLAlchemy(app)
-
-fsqla.FsModels.set_db_info(db)
-class Role(db.Model, fsqla.FsRoleMixin): pass
-class User(db.Model, fsqla.FsUserMixin): pass
+db.init_app(app)
 
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
